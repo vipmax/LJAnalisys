@@ -1,11 +1,11 @@
 import csv
 
+import datetime as dt
 import pandas
 from bson import Code
 from functional import seq
 from pymongo import MongoClient
 import matplotlib.pyplot as plt
-
 
 
 class User:
@@ -24,10 +24,11 @@ def get_users():
     count = users_collection.count()
     users = seq(users_collection).map(lambda dbo: User(dbo['login'], dbo['url'], dbo['country'])) \
         .group_by(lambda user: user.country) \
-        .map(lambda country_and_users: [country_and_users[0], 100*len(country_and_users[1])/count]) \
+        .map(lambda country_and_users: [country_and_users[0], 100 * len(country_and_users[1]) / count]) \
         .sorted(lambda country_and_users: country_and_users[1], reverse=True)
 
-    users_per_countries = pandas.DataFrame(data=users.to_list(), columns=["ISO 3166-1 2 Letter Code", "Percent of users"])
+    users_per_countries = pandas.DataFrame(data=users.to_list(),
+                                           columns=["ISO 3166-1 2 Letter Code", "Percent of users"])
     users_collection.close()
     return users_per_countries
 
@@ -84,6 +85,7 @@ def group_by_user(db):
                     }""")
     db.get_collection("livejournal_posts").map_reduce(map, reduce, out="temp")
 
+
 def group_by_date(db):
     global map, reduce
     map = Code("""
@@ -115,27 +117,35 @@ db = MongoClient(host="192.168.13.133").get_database(name="SNCrawler")
 # group_by_user(db)
 # group_by_date(db)
 #
-# n_users_per_month_and_year = db.get_collection("livejournal_number_of_users_per_month_and_year").find()
-#
-# x = []
-# y = []
-# iterables = list(n_users_per_month_and_year)
-# for iterable in iterables:
-#     if str(iterable['_id']).replace(" ", " ") > "20001" :
-#         x.append(str(iterable['_id']).replace(" ", ""))
-#         y.append(iterable['value'])
-#
-# # x = map(lambda dbo: dbo['_id'], iterables)
-# # y = map(lambda dbo: dbo['value'], iterables)
-#
-# print(x)
-# print(y)
-#
-# plt.title('Number of users per date')
-# plt.xlabel('date')
-# plt.ylabel('number of users ')
-#
-# ax = plt.subplot(111)
-# ax.plot(x, y,"o")
-# plt.legend()
+n_users_per_month_and_year = db.get_collection("livejournal_number_of_users_per_month_and_year").find()
+
+x = []
+y = []
+for iterable in list(n_users_per_month_and_year):
+    if str(iterable['_id']).replace(" ", " ") > "20001":
+        time = str(iterable['_id'])
+        x.append(dt.datetime.strptime(time,'%Y %m').date())
+        y.append(iterable['value'])
+
+# x = map(lambda dbo: dbo['_id'], iterables)
+# y = map(lambda dbo: dbo['value'], iterables)
+
+print(x)
+print(y)
+
+
+plt.figure(figsize=(20,10))
+plt.title('First post activity')
+plt.xlabel('First post date')
+plt.ylabel('Number of users')
+
+import matplotlib.dates as mdates
+
+plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y %m'))
+plt.gca().xaxis.set_major_locator(mdates.YearLocator())
+
+plt.bar(x, y)
+plt.legend()
 # plt.show()
+plt.savefig("First post activity pic.jpg", dpi=1000, format='jpg')
+
