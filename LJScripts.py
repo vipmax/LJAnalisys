@@ -1,11 +1,14 @@
+import codecs
 import csv
 
 import datetime as dt
 import pandas
 from bson import Code
+from flask import json
 from functional import seq
 from pymongo import MongoClient
 import matplotlib.pyplot as plt
+import sys
 
 
 class User:
@@ -103,6 +106,36 @@ def group_by_date(db):
     db.get_collection("livejournal_users_and_first_post_date").map_reduce(map, reduce, out="temp")
 
 
+def draw_first_post_plot(db):
+    n_users_per_month_and_year = db.get_collection("livejournal_number_of_users_per_month_and_year").find()
+    x = []
+    y = []
+    for iterable in list(n_users_per_month_and_year):
+        if str(iterable['_id']).replace(" ", " ") > "20001":
+            time = str(iterable['_id'])
+            x.append(dt.datetime.strptime(time, '%Y %m').date())
+            y.append(iterable['value'])
+
+    # x = map(lambda dbo: dbo['_id'], iterables)
+    # y = map(lambda dbo: dbo['value'], iterables)
+    print(x)
+    print(y)
+    plt.figure(figsize=(20, 10))
+    plt.title('First post activity')
+    plt.xlabel('First post date')
+    plt.ylabel('Number of users')
+    import matplotlib.dates as mdates
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y %m'))
+    plt.gca().xaxis.set_major_locator(mdates.YearLocator())
+    plt.bar(x, y)
+    plt.legend()
+    # plt.show()
+    plt.savefig("First post activity pic.jpg", dpi=1000, format='jpg')
+
+
+# countries = pandas.read_csv("iso_3166_2_countries.csv", delimiter=',')[["Common Name", "ISO 3166-1 2 Letter Code", "ISO 3166-1 3 Letter Code"]]
+# print(countries)
+
 # users = get_users()
 # print(users)
 
@@ -111,41 +144,52 @@ def group_by_date(db):
 
 # draw_plot(merge)
 
-
 db = MongoClient(host="192.168.13.133").get_database(name="SNCrawler")
-
-# group_by_user(db)
-# group_by_date(db)
 #
-n_users_per_month_and_year = db.get_collection("livejournal_number_of_users_per_month_and_year").find()
+# cursor = db.get_collection("livejournal_users").find(projection={'_id': 1, 'country': 1})
+# with open('D:\\users.csv', "a") as myfile:
+#     for entry in cursor:
+#         try:
+#             myfile.write("{},{}\n".format(entry['_id'], entry['country']))
+#         except:
+#             None
+#
+# cursor.close()
 
-x = []
-y = []
-for iterable in list(n_users_per_month_and_year):
-    if str(iterable['_id']).replace(" ", " ") > "20001":
-        time = str(iterable['_id'])
-        x.append(dt.datetime.strptime(time,'%Y %m').date())
-        y.append(iterable['value'])
-
-# x = map(lambda dbo: dbo['_id'], iterables)
-# y = map(lambda dbo: dbo['value'], iterables)
-
-print(x)
-print(y)
+# cursor = db.get_collection("livejournal_posts").find(projection={'username': 1, 'eventTimestamp': 1})
+# with open("D:\\posts.csv", "a") as myfile:
+#     count = 0
+#     for entry in cursor:
+#         count += 1
+#         if count % 10000 == 0:
+#             sys.stdout.write('\r' + str(count))
+#         myfile.write("{},{}\n".format(entry['username'], entry['eventTimestamp']))
+#
+# cursor.close()
 
 
-plt.figure(figsize=(20,10))
-plt.title('First post activity')
-plt.xlabel('First post date')
-plt.ylabel('Number of users')
+posts = pandas.read_csv("D:\\posts.csv", delimiter=',', names=["username", "eventTimestamp"])
+# posts = posts.groupby(["username"])
+# for group in posts_groupby:
+#     print(group)
+#
+#     postsEvents = [x[1] for x in group[1].values]
+#     username = group[1].values[0][0]
+#     print({"username": username, "eventTimestamps": postsEvents})
 
-import matplotlib.dates as mdates
+users = pandas.read_csv("D:\\users.csv", delimiter=',', names=["username", "country"])
+merge = pandas.merge(left=users, right=posts, on='username', how='left')
 
-plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y %m'))
-plt.gca().xaxis.set_major_locator(mdates.YearLocator())
+print(merge)
+collection = db.get_collection("livejournal_temp")
 
-plt.bar(x, y)
-plt.legend()
-# plt.show()
-plt.savefig("First post activity pic.jpg", dpi=1000, format='jpg')
+merge = merge.groupby(["username"])
+for group in merge:
+    postsEvents = [x[2] for x in group[1].values]
+    username = group[1].values[0][0]
+    country = group[1].values[0][1]
+    doc = {"username": username, "eventTimestamps": postsEvents, 'country': country}
+    # print(doc)
+    collection.insert(doc)
+
 
