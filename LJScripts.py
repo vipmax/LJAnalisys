@@ -1,14 +1,13 @@
-import codecs
-import csv
-
 import datetime as dt
 import pandas
 from bson import Code
-from flask import json
+# pip install pyfunctional
 from functional import seq
 from pymongo import MongoClient
+import matplotlib
+
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-import sys
 
 
 class User:
@@ -74,7 +73,7 @@ def draw_plot(df):
         )
     )
     fig = dict(data=data, layout=layout)
-    url = py.plot(fig, validate=False, filename='d3-world-map')
+    py.plot(fig, validate=False, filename='d3-world-map')
 
 
 def group_by_user(db):
@@ -90,7 +89,6 @@ def group_by_user(db):
 
 
 def group_by_date(db):
-    global map, reduce
     map = Code("""
             function() {
                 var date = new Date(parseFloat(this.value)*1000);
@@ -124,13 +122,14 @@ def draw_first_post_plot(db):
     plt.title('First post activity')
     plt.xlabel('First post date')
     plt.ylabel('Number of users')
+
     import matplotlib.dates as mdates
     plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y %m'))
     plt.gca().xaxis.set_major_locator(mdates.YearLocator())
-    plt.bar(x, y)
+    plt.bar(x, y, label="D")
     plt.legend()
-    # plt.show()
-    plt.savefig("First post activity pic.jpg", dpi=1000, format='jpg')
+    plt.show()
+    plt.savefig("First_post_activity_pic.jpg", dpi=1000, format='jpg')
 
 
 # countries = pandas.read_csv("iso_3166_2_countries.csv", delimiter=',')[["Common Name", "ISO 3166-1 2 Letter Code", "ISO 3166-1 3 Letter Code"]]
@@ -144,7 +143,8 @@ def draw_first_post_plot(db):
 
 # draw_plot(merge)
 
-db = MongoClient(host="192.168.13.133").get_database(name="SNCrawler")
+db = MongoClient(host="localhost").get_database(name="SNCrawler")
+# draw_first_post_plot(db)
 #
 # cursor = db.get_collection("livejournal_users").find(projection={'_id': 1, 'country': 1})
 # with open('D:\\users.csv', "a") as myfile:
@@ -168,28 +168,142 @@ db = MongoClient(host="192.168.13.133").get_database(name="SNCrawler")
 # cursor.close()
 
 
-posts = pandas.read_csv("D:\\posts.csv", delimiter=',', names=["username", "eventTimestamp"])
-# posts = posts.groupby(["username"])
-# for group in posts_groupby:
-#     print(group)
+# posts = pandas.read_csv("D:\\posts.csv", delimiter=',', names=["username", "eventTimestamp"])
+# # posts = posts.groupby(["username"])
+# # for group in posts_groupby:
+# #     print(group)
+# #
+# #     postsEvents = [x[1] for x in group[1].values]
+# #     username = group[1].values[0][0]
+# #     print({"username": username, "eventTimestamps": postsEvents})
 #
-#     postsEvents = [x[1] for x in group[1].values]
+# users = pandas.read_csv("D:\\users.csv", delimiter=',', names=["username", "country"])
+# merge = pandas.merge(left=users, right=posts, on='username', how='left')
+#
+# print(merge)
+# collection = db.get_collection("livejournal_temp")
+#
+# merge = merge.groupby(["username"])
+# for group in merge:
+#     postsEvents = [x[2] for x in group[1].values]
 #     username = group[1].values[0][0]
-#     print({"username": username, "eventTimestamps": postsEvents})
-
-users = pandas.read_csv("D:\\users.csv", delimiter=',', names=["username", "country"])
-merge = pandas.merge(left=users, right=posts, on='username', how='left')
-
-print(merge)
-collection = db.get_collection("livejournal_temp")
-
-merge = merge.groupby(["username"])
-for group in merge:
-    postsEvents = [x[2] for x in group[1].values]
-    username = group[1].values[0][0]
-    country = group[1].values[0][1]
-    doc = {"username": username, "eventTimestamps": postsEvents, 'country': country}
-    # print(doc)
-    collection.insert(doc)
+#     country = group[1].values[0][1]
+#     doc = {"username": username, "eventTimestamps": postsEvents, 'country': country}
+#     # print(doc)
+#     collection.insert(doc)
 
 
+# collection = db.get_collection("livejournal_temp").find({'country': 'RU'}, {'country': 1, 'eventTimestamps': 1, 'username': 1})[:]
+# ru_collection = db.get_collection("livejournal_temp_ru")
+#
+# for entry in collection:
+#     if len(entry['eventTimestamps']) > 1:
+#         print(entry)
+#         ru_collection.insert(entry)
+
+#
+# ru_collection = db.get_collection("user_and_post_ru").find().limit(100)
+ru_collection = list(db.get_collection("users_and_posts_time_ru").find().limit(1)[:])
+
+
+def toDate(timestamp):
+    time = dt.datetime.fromtimestamp(float(timestamp))
+    if time.year < 2000: return None
+    return "{}-{}-{} 00:00:00".format(time.year, time.month, time.day)
+
+# y = list(map(lambda x: x['_id'], ru_collection))
+# print(x)
+#
+
+from itertools import groupby
+#
+# def f(timestamps):
+#     localtimestamps = list(map(lambda t: map1(t), timestamps))
+#     localtimestamps = map(lambda x: x ,list(groupby(localtimestamps,key=lambda x: x[0])))
+#     print(localtimestamps)
+#     return localtimestamps
+
+
+x = []
+y = []
+z = []
+n = 0
+for entry in ru_collection:
+    if n >25: break
+
+    print(entry)
+    dates = []
+    for timestamp in entry['eventTimestamps']:
+        timestamp = toDate(timestamp)
+        dates.append((timestamp, 1))
+
+    # print(dates)
+
+    # dates = list(dates.sort(key=lambda xxx: xxx[0]))
+
+    for group in groupby(dates, key=lambda x: x[0]):
+        username = entry['_id']
+        date = group[0]
+        posts_count = len(list(group[1]))
+
+        if date is not None:
+            print("username" + username + "date = " + date + ", count = " + str(posts_count))
+            y.append(username)
+            x.append(date)
+            z.append(posts_count)
+
+    n += 1
+
+    # print(entry['_id'] + " " + entry['country'lambda x: x[0]] + " " + entry['eventTimestamps'])
+#
+#
+# y = list(map(f, ru_collection))
+# for yy in y:
+#     print(yy)
+
+# y = []
+
+# for entry in list(ru_collection):
+#     time = dt.datetime.fromtimestamp(float(entry['eventTimestamp']))
+#     print("{} {} {}".format(time.year, time.month, time.day))
+
+
+# x.append(time.date())
+# y.append(entry['value'])
+
+# # x = map(lambda dbo: dbo['_id'], iterables)
+# # y = map(lambda dbo: dbo['value'], iterables)
+# print(x)
+# print(y)
+# plt.figure(figsize=(20, 10))
+# plt.title('First post activity')
+# plt.xlabel('First post date')
+# plt.ylabel('Number of users')
+#
+# import matplotlib.dates as mdates
+#
+# # plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y %m'))
+# # plt.gca().xaxis.set_major_locator(mdates.YearLocator())
+# plt.plot(x, y, label="D")
+# plt.legend()
+# plt.show()
+
+
+import plotly.graph_objs as go
+import plotly.plotly as py
+
+import numpy as np
+
+trace1 = go.Scatter(
+    x = x,
+    y = y,
+    mode='markers',
+    marker=dict(
+        color = z, #set color equal to a variable
+        colorscale='Viridis',
+        showscale=True
+    )
+)
+data = [trace1]
+py.sign_in(username='djvipmax', api_key='mcjfxjdavg')
+py.plot(data, filename='scatter-plot-with-colorscale')
